@@ -1,0 +1,20 @@
+# Core Dependencies
+Flask==2.3.3
+Flask-CORS==4.0.0
+Flask-Login==0.6.3
+
+# Database
+mysql-connector-python==8.2.0
+
+# Utilities
+python-dotenv==1.0.0
+schedule==1.2.0
+
+# Production Server
+gunicorn==21.2.0
+
+# Monitoring and Logging
+python-json-logger==2.0.7
+
+# Error Tracking (Optional, comment out if not needed)
+# sentry-sdk==1.38.0

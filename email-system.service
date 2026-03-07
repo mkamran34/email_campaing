@@ -1,0 +1,74 @@
+# Systemd Service File for Email System
+# Location: /etc/systemd/system/email-system.service
+#
+# Installation:
+#   1. Copy this file to /etc/systemd/system/email-system.service
+#   2. Update WorkingDirectory and EnvironmentFile paths as needed
+#   3. Run: systemctl daemon-reload
+#   4. Enable: systemctl enable email-system
+#   5. Start: systemctl start email-system
+#   6. Monitor: systemctl status email-system
+#   7. View logs: journalctl -u email-system -f
+
+[Unit]
+Description=Email System Application - Flask + Gunicorn
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+# User and Group
+User=www-data
+Group=www-data
+
+# Working Directory
+WorkingDirectory=/var/www/email-system
+
+# Environment variables from .env file
+EnvironmentFile=/var/www/email-system/.env.production
+
+# Python path
+Environment="PATH=/var/www/email-system/.venv/bin"
+
+# Application startup command
+ExecStart=/var/www/email-system/.venv/bin/gunicorn \
+    --workers 4 \
+    --worker-class sync \
+    --bind 0.0.0.0:5001 \
+    --timeout 120 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --access-logfile /var/log/email-system/access.log \
+    --error-logfile /var/log/email-system/error.log \
+    wsgi:app
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60s
+StartLimitBurst=3
+
+# Process management
+Type=notify
+NotifyAccess=main
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/www/email-system /var/log/email-system
+
+# Resource limits (optional)
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=email-system
+
+[Install]
+WantedBy=multi-user.target

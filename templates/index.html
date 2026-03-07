@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email System Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- GrapesJS -->
+    <link rel="stylesheet" href="https://unpkg.com/grapesjs/dist/css/grapes.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/grapesjs-preset-newsletter/dist/grapesjs-preset-newsletter.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-envelope"></i> Email System Dashboard</h1>
+                <div class="header-right">
+                    <span class="status-indicator" id="statusIndicator">
+                        <span class="dot"></span>
+                        <span>Connected</span>
+                    </span>
+                    <span class="timestamp" id="timestamp"></span>
+                    
+                    <!-- User Menu -->
+                    <div class="user-menu">
+                        <button class="user-btn" id="userMenuBtn">
+                            <i class="fas fa-user-circle"></i>
+                            <span id="userMenuUsername">User</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="user-dropdown" id="userDropdown">
+                            <a href="#" id="userProfileLink" class="dropdown-item">
+                                <i class="fas fa-user"></i> Profile
+                            </a>
+                            <a href="#" id="userSettingsLink" class="dropdown-item">
+                                <i class="fas fa-cog"></i> Settings
+                            </a>
+                            <hr class="dropdown-divider">
+                            <a href="#" id="logoutBtn" class="dropdown-item logout">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Statistics Cards -->
+            <section class="stats-section">
+                <div class="stats-grid">
+                    <div class="stat-card total">
+                        <div class="stat-icon"><i class="fas fa-envelope"></i></div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="totalEmails">0</div>
+                            <div class="stat-label">Total Emails</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card pending">
+                        <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="pendingEmails">0</div>
+                            <div class="stat-label">Pending</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card sent">
+                        <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="sentEmails">0</div>
+                            <div class="stat-label">Sent Today</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card failed">
+                        <div class="stat-icon"><i class="fas fa-exclamation-circle"></i></div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="failedEmails">0</div>
+                            <div class="stat-label">Failed</div>
+                        </div>
+                    </div>
+
+                    <div class="stat-card bounced">
+                        <div class="stat-icon"><i class="fas fa-ban"></i></div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="bouncedEmails">0</div>
+                            <div class="stat-label">Bounced</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Tabs -->
+            <section class="tabs-section">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="all-emails">
+                        <i class="fas fa-list"></i> All Emails
+                    </button>
+                    <button class="tab-btn" data-tab="pending">
+                        <i class="fas fa-clock"></i> Pending
+                    </button>
+                    <button class="tab-btn" data-tab="sent">
+                        <i class="fas fa-check"></i> Sent
+                    </button>
+                    <button class="tab-btn" data-tab="failed">
+                        <i class="fas fa-times"></i> Failed
+                    </button>
+                    <button class="tab-btn" data-tab="bounced">
+                        <i class="fas fa-ban"></i> Bounced
+                    </button>
+                    <button class="tab-btn" data-tab="send-now">
+                        <i class="fas fa-paper-plane"></i> Send Now
+                    </button>
+                    <button class="tab-btn" data-tab="settings">
+                        <i class="fas fa-cog"></i> Settings
+                    </button>
+                    <button class="tab-btn" data-tab="validation">
+                        <i class="fas fa-check-double"></i> Validation
+                    </button>
+                    <button class="tab-btn" data-tab="templates">
+                        <i class="fas fa-file-alt"></i> Templates
+                    </button>
+                    <button class="tab-btn" data-tab="scheduler">
+                        <i class="fas fa-calendar-alt"></i> Scheduler
+                    </button>
+                </div>
+
+                <!-- Emails List -->
+                <div class="tab-content active" id="tab-all-emails">
+                    <div class="emails-header">
+                        <div class="filter-group">
+                            <input type="text" id="searchInput" placeholder="Search emails..." class="search-box">
+                            <button id="refreshBtn" class="btn btn-secondary">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                        </div>
+                        <div class="action-group">
+                            <button id="bulkMarkSentBtn" class="btn btn-success" style="display:none;">
+                                <i class="fas fa-check"></i> Mark Selected as Sent
+                            </button>
+                            <button id="bulkDeleteBtn" class="btn btn-danger" style="display:none;">
+                                <i class="fas fa-trash"></i> Delete Selected
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="emails-table-wrapper">
+                        <table class="emails-table" id="emailsTable">
+                            <thead>
+                                <tr>
+                                    <th><input type="checkbox" id="selectAllCheckbox"></th>
+                                    <th>ID</th>
+                                    <th>Recipient</th>
+                                    <th>Subject</th>
+                                    <th>Status</th>
+                                    <th>Sent</th>
+                                    <th>Created</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="emailsTableBody">
+                                <tr><td colspan="8" class="text-center">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="pagination" id="pagination"></div>
+                </div>
+
+                <!-- Other Tabs -->
+                <div class="tab-content" id="tab-pending"></div>
+                <div class="tab-content" id="tab-sent"></div>
+                <div class="tab-content" id="tab-failed"></div>
+                <div class="tab-content" id="tab-bounced"></div>
+
+                <!-- Send Now Tab -->
+                <div class="tab-content" id="tab-send-now">
+                    <div class="settings-container">
+                        <h2><i class="fas fa-paper-plane"></i> Send Emails Manually</h2>
+                        <p class="text-muted">Trigger email sending immediately for testing purposes.</p>
+                        
+                        <div class="form-group">
+                            <label for="sendNowLimit">Number of emails to send:</label>
+                            <input type="number" id="sendNowLimit" class="form-input" value="10" min="1" max="1000">
+                            <small class="text-muted">Maximum 1000 emails per manual send</small>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <strong>Note:</strong> This will send pending emails immediately. The system will:
+                                <ul>
+                                    <li>Fetch the specified number of pending emails</li>
+                                    <li>Attempt to send them via SMTP</li>
+                                    <li>Update their status in the database</li>
+                                    <li>Return results within 60 seconds</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <button id="sendNowBtn" class="btn btn-primary btn-lg">
+                            <i class="fas fa-paper-plane"></i> Send Emails Now
+                        </button>
+
+                        <div id="sendNowResult" class="result-box" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div class="tab-content" id="tab-settings">
+                    <div class="settings-container">
+                        <h2><i class="fas fa-cog"></i> System Configuration</h2>
+                        <p class="text-muted">Manage email sending settings and schedule parameters.</p>
+
+                        <div class="settings-grid">
+                            <div class="form-group">
+                                <label for="batchSize">Batch Size:</label>
+                                <input type="number" id="batchSize" class="form-input" min="1" max="1000">
+                                <small class="text-muted">Number of emails per batch</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="dailyLimit">Daily Limit:</label>
+                                <input type="number" id="dailyLimit" class="form-input" min="1" max="100000">
+                                <small class="text-muted">Maximum emails per day</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="batchDelay">Batch Delay (seconds):</label>
+                                <input type="number" id="batchDelay" class="form-input" min="0" max="3600">
+                                <small class="text-muted">Wait time between batches</small>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <strong>Current SMTP Configuration:</strong>
+                                <ul>
+                                    <li>Host: <span id="smtpHost">-</span></li>
+                                    <li>Port: <span id="smtpPort">-</span></li>
+                                    <li>From: <span id="fromEmail">-</span></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="smtp-test-section">
+                            <h3><i class="fas fa-envelope-circle-check"></i> Test SMTP Connection</h3>
+                            <p class="text-muted">Verify your SMTP settings are working correctly.</p>
+                            
+                            <div class="form-group">
+                                <label for="testEmail">Test Email Address (optional):</label>
+                                <input type="email" id="testEmail" class="form-input" placeholder="your-email@example.com">
+                                <small class="text-muted">Leave empty to test connection only, or enter an email to send a test message</small>
+                            </div>
+
+                            <button id="testSmtpBtn" class="btn btn-primary">
+                                <i class="fas fa-vial"></i> Test SMTP Connection
+                            </button>
+
+                            <div id="smtpTestResult" class="result-box" style="display: none;"></div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <div>
+                                <strong>Important:</strong> Changes to these settings update the .env file. 
+                                You must restart the email sender for changes to take effect.
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button id="saveSettingsBtn" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                            <button id="reloadSettingsBtn" class="btn btn-secondary">
+                                <i class="fas fa-undo"></i> Reload
+                            </button>
+                        </div>
+
+                        <div id="settingsResult" class="result-box" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Validation Tab -->
+                <div class="tab-content" id="tab-validation">
+                    <div class="settings-container">
+                        <h2><i class="fas fa-check-double"></i> Email Validation Manager</h2>
+                        <p class="text-muted">Validate email addresses in the database and update their validation status.</p>
+
+                        <!-- Validation Statistics -->
+                        <div class="validation-stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Total Emails</div>
+                                <div class="stat-value" id="valTotalEmails">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Unchecked</div>
+                                <div class="stat-value" id="valUnchecked">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Valid</div>
+                                <div class="stat-value valid" id="valValid">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Invalid</div>
+                                <div class="stat-value invalid" id="valInvalid">0</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Needs Review</div>
+                                <div class="stat-value warning" id="valNeedsReview">0</div>
+                            </div>
+                        </div>
+
+                        <!-- Validation Controls -->
+                        <div class="form-group">
+                            <label for="validationLevel">Validation Level:</label>
+                            <select id="validationLevel" class="form-input">
+                                <option value="quick">Quick (Syntax only) - Fastest</option>
+                                <option value="syntax" selected>Syntax (Typo detection) - Recommended</option>
+                                <option value="full">Full (MX records) - Slowest</option>
+                            </select>
+                            <small class="text-muted">Choose the validation thoroughness level</small>
+                        </div>
+
+                        <div class="validation-controls-grid">
+                            <div class="form-group">
+                                <label for="validationStatus">Email Status to Validate:</label>
+                                <select id="validationStatus" class="form-input">
+                                    <option value="unchecked">Unchecked (None validated yet)</option>
+                                    <option value="valid">Valid (Already passed)</option>
+                                    <option value="invalid">Invalid (Failed validation)</option>
+                                    <option value="needs_review">Needs Review (Has warnings)</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="validationBatchSize">Batch Size:</label>
+                                <input type="number" id="validationBatchSize" class="form-input" value="100" min="1" max="1000">
+                                <small class="text-muted">Emails to validate per run</small>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <div>
+                                <strong>What is Email Validation?</strong>
+                                <ul>
+                                    <li><strong>Quick:</strong> Checks email syntax only</li>
+                                    <li><strong>Syntax:</strong> Checks syntax, detects typos (gmial.com → gmail.com), identifies disposable providers</li>
+                                    <li><strong>Full:</strong> All of the above plus DNS MX record verification (slower but most accurate)</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button id="startValidationBtn" class="btn btn-primary btn-lg">
+                                <i class="fas fa-play"></i> Start Validation
+                            </button>
+                            <button id="refreshValidationStatsBtn" class="btn btn-secondary">
+                                <i class="fas fa-refresh"></i> Refresh Stats
+                            </button>
+                        </div>
+
+                        <div id="validationResult" class="result-box" style="display: none;"></div>
+
+                        <!-- Validation Results Table -->
+                        <h3 style="margin-top: 2rem;">Validation Results</h3>
+                        <div class="table-wrapper">
+                            <table class="emails-table">
+                                <thead>
+                                    <tr>
+                                        <th>Email</th>
+                                        <th>Status</th>
+                                        <th>Warnings</th>
+                                        <th>Message</th>
+                                        <th>Validated At</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="validationResultsTableBody">
+                                    <tr><td colspan="5" class="text-center">Loading validation results...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <div class="pagination" id="validationPagination"></div>
+                    </div>
+                </div>
+
+                <!-- Templates Tab -->
+                <div class="tab-content" id="tab-templates">
+                    <div class="templates-section">
+                        <div class="section-header">
+                            <h2><i class="fas fa-file-alt"></i> Email Templates</h2>
+                            <button id="createTemplateBtn" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Create Template
+                            </button>
+                        </div>
+
+                        <!-- Create/Edit Template Form -->
+                        <div id="templateForm" class="form-section" style="display: none; margin-bottom: 2rem;">
+                            <div class="template-editor-header">
+                                <h3 id="formTitle">Create New Template</h3>
+                                <div class="editor-mode-switcher">
+                                    <button id="codeEditorModeBtn" class="mode-btn active" title="Code Editor">
+                                        <i class="fas fa-code"></i> Code Editor
+                                    </button>
+                                    <button id="visualBuilderModeBtn" class="mode-btn" title="Visual Builder">
+                                        <i class="fas fa-wand-magic-sparkles"></i> Visual Builder
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Code Editor Mode -->
+                            <div id="codeEditorMode">
+                                <div class="form-group">
+                                    <label for="templateName">Template Name:</label>
+                                    <input type="text" id="templateName" class="form-input" placeholder="e.g., Welcome Email" required>
+                                    <small class="text-muted">Unique name for this template</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="templateSubject">Email Subject:</label>
+                                    <input type="text" id="templateSubject" class="form-input" placeholder="e.g., Welcome to our service" required>
+                                    <small class="text-muted">Subject line that will appear in emails</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="templateBody">Email Body (Plain Text):</label>
+                                    <textarea id="templateBody" class="form-textarea" rows="8" placeholder="Enter email body..." required></textarea>
+                                    <small class="text-muted">Use {{name}}, {{email}} for variables</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="templateHtml">Email Body (HTML - Optional):</label>
+                                    <textarea id="templateHtml" class="form-textarea" rows="8" placeholder="Enter HTML version..."></textarea>
+                                    <small class="text-muted">HTML version of your email</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="templateTags">Tags (comma-separated):</label>
+                                    <input type="text" id="templateTags" class="form-input" placeholder="e.g., welcome, promotional, transactional">
+                                </div>
+
+                                <div class="form-actions">
+                                    <button id="saveTemplateBtn" class="btn btn-success">
+                                        <i class="fas fa-save"></i> Save Template
+                                    </button>
+                                    <button id="cancelTemplateBtn" class="btn btn-secondary">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Visual Builder Mode -->
+                            <div id="visualBuilderMode" style="display: none;">
+                                <div class="visual-builder-container">
+                                    <!-- Template Info -->
+                                    <div class="builder-section-top">
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label for="builderTemplateName">Template Name:</label>
+                                                <input type="text" id="builderTemplateName" class="form-input" placeholder="e.g., Welcome Email" required>
+                                            </div>
+                                            <div class="form-group">
+                                                <label for="builderTemplateSubject">Email Subject:</label>
+                                                <input type="text" id="builderTemplateSubject" class="form-input" placeholder="e.g., Welcome to our service" required>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- GrapesJS Editor -->
+                                    <div id="gjs" style="height: 650px; overflow: hidden;"></div>
+
+                                    <!-- Builder Actions -->
+                                    <div class="form-actions" style="margin-top: 1rem;">
+                                        <button id="saveBuilderTemplateBtn" class="btn btn-success">
+                                            <i class="fas fa-save"></i> Save Template
+                                        </button>
+                                        <button id="cancelBuilderBtn" class="btn btn-secondary">
+                                            <i class="fas fa-times"></i> Cancel
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Templates List -->
+                        <div id="templatesList" class="templates-grid">
+                            <div class="loading-message">Loading templates...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scheduler Tab -->
+                <div class="tab-content" id="tab-scheduler">
+                    <div class="scheduler-section">
+                        <div class="section-header">
+                            <h2><i class="fas fa-calendar-alt"></i> Email Scheduler</h2>
+                            <button id="createScheduleBtn" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Create Schedule
+                            </button>
+                        </div>
+
+                        <!-- Create/Edit Schedule Form -->
+                        <div id="scheduleForm" class="form-section" style="display: none; margin-bottom: 2rem;">
+                            <h3 id="scheduleFormTitle">Create New Schedule</h3>
+                            
+                            <div class="form-group">
+                                <label for="scheduleName">Schedule Name:</label>
+                                <input type="text" id="scheduleName" class="form-input" placeholder="e.g., Daily Newsletter" required>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="scheduleTemplate">Email Template:</label>
+                                    <select id="scheduleTemplate" class="form-input">
+                                        <option value="">-- Select Template --</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="scheduleType">Schedule Type:</label>
+                                    <select id="scheduleType" class="form-input" required>
+                                        <option value="once">Once</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="scheduleTime">Time:</label>
+                                    <input type="time" id="scheduleTime" class="form-input">
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="scheduleStartDate">Start Date:</label>
+                                    <input type="date" id="scheduleStartDate" class="form-input" required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="scheduleEndDate">End Date (Optional):</label>
+                                    <input type="date" id="scheduleEndDate" class="form-input">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="scheduleRecipients">Recipients (one per line):</label>
+                                <textarea id="scheduleRecipients" class="form-textarea" rows="6" placeholder="email1@example.com&#10;email2@example.com" required></textarea>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="scheduleNotes">Notes:</label>
+                                <textarea id="scheduleNotes" class="form-textarea" rows="3" placeholder="Any notes about this schedule..."></textarea>
+                            </div>
+
+                            <div class="form-actions">
+                                <button id="saveScheduleBtn" class="btn btn-success">
+                                    <i class="fas fa-save"></i> Save Schedule
+                                </button>
+                                <button id="cancelScheduleBtn" class="btn btn-secondary">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Schedules List -->
+                        <div id="schedulesList" class="schedules-grid">
+                            <div class="loading-message">Loading schedules...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Email Detail Modal -->
+    <div class="modal" id="emailModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Email Details</h2>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="emailModalBody">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/grapesjs"></script>
+    <script src="https://unpkg.com/grapesjs-preset-newsletter"></script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

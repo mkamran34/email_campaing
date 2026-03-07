@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # MySQL Database
+  db:
+    image: mysql:8.0
+    container_name: email_system_db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-email_system}
+      MYSQL_USER: ${DB_USER:-emailuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-emailpass}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+    networks:
+      - email_network
+
+  # Flask Application
+  app:
+    build: .
+    container_name: email_system_app
+    environment:
+      FLASK_ENV: ${FLASK_ENV:-production}
+      DB_HOST: db
+      DB_USER: ${DB_USER:-emailuser}
+      DB_PASSWORD: ${DB_PASSWORD:-emailpass}
+      DB_NAME: ${DB_NAME:-email_system}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-True}
+      FROM_EMAIL: ${FROM_EMAIL}
+      SECRET_KEY: ${SECRET_KEY:-dev-key-change-in-production}
+    ports:
+      - "5001:5001"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - email_network
+
+volumes:
+  db_data:
+
+networks:
+  email_network:
+    driver: bridge
