@@ -490,25 +490,29 @@ class DashboardDB:
     
     # ==================== SCHEDULE METHODS ====================
     
-    def create_schedule(self, template_id, frequency, schedule_time, recipient_filter=None, 
-                       start_date=None, end_date=None, is_active=True):
+    def create_schedule(self, name, template_id, recipient_list, schedule_type, 
+                       schedule_time=None, schedule_day=None, start_date=None, 
+                       end_date=None, created_by=None, notes=None):
         """Create a new email schedule"""
         try:
             cursor = self.connection.cursor()
+            import json
+            
+            recipient_json = json.dumps(recipient_list) if isinstance(recipient_list, list) else recipient_list
+            total_recipients = len(recipient_list) if isinstance(recipient_list, list) else 0
             
             query = """
                 INSERT INTO email_schedules 
-                (template_id, frequency, schedule_time, recipient_filter, 
-                 start_date, end_date, is_active, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                (name, template_id, recipient_list, schedule_type, schedule_time, schedule_day, 
+                 start_date, end_date, created_by, notes, total_recipients)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
-            cursor.execute(query, (template_id, frequency, schedule_time, recipient_filter, 
-                                 start_date, end_date, is_active))
-            
+            cursor.execute(query, (name, template_id, recipient_json, schedule_type, 
+                                  schedule_time, schedule_day, start_date, end_date, created_by, notes, total_recipients))
             self.connection.commit()
             schedule_id = cursor.lastrowid
             cursor.close()
-            logger.info(f"Schedule created with ID {schedule_id}")
+            logger.info(f"Schedule created: {name} (ID: {schedule_id})")
             return schedule_id
         except Error as e:
             logger.error(f"Error creating schedule: {e}")
@@ -520,9 +524,11 @@ class DashboardDB:
         try:
             cursor = self.connection.cursor(dictionary=True)
             query = """
-                SELECT s.id, s.template_id, t.name as template_name, s.frequency, 
-                       s.schedule_time, s.recipient_filter, s.start_date, s.end_date, 
-                       s.is_active, s.last_run, s.next_run, s.created_at, s.updated_at
+                SELECT s.id, s.name, s.template_id, t.name as template_name, 
+                       s.schedule_type, s.schedule_time, s.schedule_day, s.recipient_list,
+                       s.start_date, s.end_date, s.is_active, s.total_recipients,
+                       s.sent_count, s.failed_count, s.status, s.last_run, s.next_run, 
+                       s.created_at, s.updated_at, s.created_by, s.notes
                 FROM email_schedules s
                 LEFT JOIN email_templates t ON s.template_id = t.id
                 ORDER BY s.updated_at DESC
@@ -536,6 +542,21 @@ class DashboardDB:
                 for field in ['start_date', 'end_date', 'last_run', 'next_run', 'created_at', 'updated_at']:
                     if schedule.get(field):
                         schedule[field] = schedule[field].strftime('%Y-%m-%d %H:%M:%S')
+                # Convert timedelta (TIME field) to string
+                if schedule.get('schedule_time') and hasattr(schedule['schedule_time'], 'total_seconds'):
+                    # Convert timedelta to HH:MM:SS format
+                    total_seconds = int(schedule['schedule_time'].total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    seconds = total_seconds % 60
+                    schedule['schedule_time'] = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                # Parse recipient_list from JSON if it's a string
+                if schedule.get('recipient_list') and isinstance(schedule['recipient_list'], str):
+                    import json
+                    try:
+                        schedule['recipient_list'] = json.loads(schedule['recipient_list'])
+                    except:
+                        schedule['recipient_list'] = []
             
             return schedules
         except Error as e:
@@ -560,6 +581,20 @@ class DashboardDB:
                 for field in ['start_date', 'end_date', 'last_run', 'next_run', 'created_at', 'updated_at']:
                     if schedule.get(field):
                         schedule[field] = schedule[field].strftime('%Y-%m-%d %H:%M:%S')
+                # Convert timedelta (TIME field) to string
+                if schedule.get('schedule_time') and hasattr(schedule['schedule_time'], 'total_seconds'):
+                    total_seconds = int(schedule['schedule_time'].total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    seconds = total_seconds % 60
+                    schedule['schedule_time'] = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                # Parse recipient_list from JSON if it's a string
+                if schedule.get('recipient_list') and isinstance(schedule['recipient_list'], str):
+                    import json
+                    try:
+                        schedule['recipient_list'] = json.loads(schedule['recipient_list'])
+                    except:
+                        schedule['recipient_list'] = []
             
             return schedule
         except Error as e:
@@ -572,13 +607,19 @@ class DashboardDB:
             cursor = self.connection.cursor()
             
             # Build dynamic update query based on provided fields
-            allowed_fields = ['template_id', 'frequency', 'schedule_time', 'recipient_filter',
-                            'start_date', 'end_date', 'is_active', 'last_run', 'next_run']
+            allowed_fields = ['name', 'template_id', 'recipient_list', 'schedule_type', 'schedule_time', 
+                            'schedule_day', 'start_date', 'end_date', 'is_active', 'total_recipients',
+                            'sent_count', 'failed_count', 'status', 'last_run', 'next_run', 
+                            'created_by', 'notes']
             updates = []
             params = []
             
             for field, value in kwargs.items():
                 if field in allowed_fields:
+                    # Convert recipient_list to JSON if it's a list
+                    if field == 'recipient_list' and isinstance(value, list):
+                        import json
+                        value = json.dumps(value)
                     updates.append(f"{field} = %s")
                     params.append(value)
             

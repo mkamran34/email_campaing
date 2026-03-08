@@ -1467,7 +1467,7 @@ function initializeGrapesJS() {
     // If editor already exists, don't reinitialize
     if (grapesjsEditor) return;
 
-    grapesjsEditor = grapesjs.init({
+    const config = {
         container: '#gjs',
         fromElement: true,
         height: '650px',
@@ -1563,7 +1563,9 @@ function initializeGrapesJS() {
                 }
             ]
         }
-    });
+    };
+
+    grapesjsEditor = grapesjs.init(config);
 
     // Load existing content if editing a template
     const existingHtml = document.getElementById('templateHtml')?.value;
