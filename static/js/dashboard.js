@@ -1,3 +1,31 @@
+// Load group members for scheduler
+async function loadSchedulerGroupMembers(groupId) {
+    if (!groupId) {
+        setSchedulerRecipients([]);
+        return;
+    }
+    try {
+        const response = await fetch(`/api/scheduler/group-members?group_id=${encodeURIComponent(groupId)}`, { credentials: 'same-origin' });
+        const data = await response.json();
+        if (data.success && Array.isArray(data.members)) {
+            setSchedulerRecipients(data.members);
+        } else {
+            setSchedulerRecipients([]);
+        }
+    } catch (err) {
+        console.error('Error loading group members:', err);
+        setSchedulerRecipients([]);
+    }
+}
+// Attach event handler for group selection
+document.addEventListener('DOMContentLoaded', function() {
+    const groupSelect = document.getElementById('scheduleGroupSelect');
+    if (groupSelect) {
+        groupSelect.addEventListener('change', function() {
+            loadSchedulerGroupMembers(this.value);
+        });
+    }
+});
 // Dashboard JavaScript
 
 let currentPage = 1;
@@ -742,6 +770,7 @@ function handleTabClick(btn) {
         // Load schedules and templates for dropdown
         loadSchedules();
         loadScheduleTemplates();
+        loadSchedulerRecipientsFromDb();
         return;
     }
     
@@ -1165,6 +1194,24 @@ function resetTemplateForm() {
 
 // ===================== SCHEDULER MANAGEMENT =====================
 
+let schedulerRecipientsCache = [];
+
+function setSchedulerRecipientsNotice(message = '', level = 'info') {
+    const noticeEl = document.getElementById('scheduleRecipientsNotice');
+    if (!noticeEl) return;
+
+    if (!message) {
+        noticeEl.style.display = 'none';
+        noticeEl.textContent = '';
+        noticeEl.className = 'scheduler-recipients-notice';
+        return;
+    }
+
+    noticeEl.style.display = 'block';
+    noticeEl.textContent = message;
+    noticeEl.className = `scheduler-recipients-notice notice-${level}`;
+}
+
 async function loadSchedules() {
     try {
         const response = await fetch('/api/schedules');
@@ -1250,6 +1297,206 @@ async function loadScheduleTemplates() {
     }
 }
 
+async function loadSchedulerRecipientsFromDb(preselectedRecipients = []) {
+    try {
+        setSchedulerRecipientsNotice('Loading recipients from database...', 'info');
+        const filterValue = document.getElementById('scheduleDbRecipientFilter')?.value || 'valid';
+        const validationStatusParam = filterValue === 'all' ? '' : `&validation_status=${encodeURIComponent(filterValue)}`;
+        const response = await fetch(`/api/scheduler/recipients?limit=5000${validationStatusParam}`, {
+            credentials: 'same-origin'
+        });
+
+        let data = null;
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const bodyText = await response.text();
+            throw new Error(`Non-JSON response from /api/scheduler/recipients (status ${response.status}): ${bodyText.slice(0, 120)}`);
+        }
+
+        if (!response.ok) {
+            throw new Error(data?.error || `Failed to load recipients (status ${response.status})`);
+        }
+
+        if (data.success && Array.isArray(data.recipients)) {
+            schedulerRecipientsCache = data.recipients;
+            const select = document.getElementById('scheduleDbRecipients');
+            select.innerHTML = '';
+
+            data.recipients.forEach(email => {
+                const option = document.createElement('option');
+                option.value = email;
+                option.textContent = email;
+                option.selected = preselectedRecipients.includes(email);
+                select.appendChild(option);
+            });
+
+            const filterLabel = filterValue === 'all' ? 'all recipients' : `validation_status=${filterValue}`;
+            setSchedulerRecipientsNotice(
+                `Loaded ${data.recipients.length} recipients from scheduler API (${filterLabel}).`,
+                'info'
+            );
+
+            return;
+        }
+
+        throw new Error(data?.error || 'Unexpected recipients response shape');
+    } catch (error) {
+        console.error('Error loading scheduler recipients from database:', error);
+
+        // Fallback: derive unique recipients from /api/emails when the dedicated endpoint is unavailable.
+        try {
+            const fallbackResponse = await fetch('/api/emails?limit=5000&page=1', {
+                credentials: 'same-origin'
+            });
+            const fallbackData = await fallbackResponse.json();
+
+            if (!fallbackResponse.ok || !fallbackData.success || !Array.isArray(fallbackData.emails)) {
+                throw new Error(fallbackData?.error || `Fallback failed (status ${fallbackResponse.status})`);
+            }
+
+            const uniqueRecipients = Array.from(new Set(
+                fallbackData.emails
+                    .map(email => (email.recipient || '').trim())
+                    .filter(recipient => recipient.length > 0)
+            )).sort((a, b) => a.localeCompare(b));
+
+            schedulerRecipientsCache = uniqueRecipients;
+            const select = document.getElementById('scheduleDbRecipients');
+            select.innerHTML = '';
+
+            uniqueRecipients.forEach(email => {
+                const option = document.createElement('option');
+                option.value = email;
+                option.textContent = email;
+                option.selected = preselectedRecipients.includes(email);
+                select.appendChild(option);
+            });
+
+            setSchedulerRecipientsNotice(
+                `Scheduler recipients API failed, using fallback from /api/emails (${uniqueRecipients.length} recipients).`,
+                'warning'
+            );
+        } catch (fallbackError) {
+            console.error('Fallback recipient loading also failed:', fallbackError);
+            setSchedulerRecipientsNotice(
+                'Could not load recipients from database. Check login/session and backend route /api/scheduler/recipients.',
+                'error'
+            );
+        }
+    }
+}
+
+function toggleScheduleRecipientMode(mode) {
+    const source = mode || document.getElementById('scheduleRecipientSource').value;
+    const manualGroup = document.getElementById('scheduleRecipientsManualGroup');
+    const dbGroup = document.getElementById('scheduleRecipientsDbGroup');
+    const csvGroup = document.getElementById('scheduleRecipientsCsvGroup');
+    const groupGroup = document.getElementById('scheduleRecipientsGroup');
+
+    manualGroup.style.display = 'none';
+    dbGroup.style.display = 'none';
+    csvGroup.style.display = 'none';
+    groupGroup.style.display = 'none';
+
+    if (source === 'database') {
+        dbGroup.style.display = 'block';
+        if (schedulerRecipientsCache.length === 0) {
+            loadSchedulerRecipientsFromDb();
+        }
+    } else if (source === 'csv') {
+        csvGroup.style.display = 'block';
+    } else if (source === 'group') {
+        groupGroup.style.display = 'block';
+        loadSchedulerGroups();
+    } else {
+        manualGroup.style.display = 'block';
+    }
+}
+// Load groups for scheduler
+async function loadSchedulerGroups() {
+    try {
+        const response = await fetch('/api/scheduler/groups', { credentials: 'same-origin' });
+        const data = await response.json();
+        const select = document.getElementById('scheduleGroupSelect');
+        select.innerHTML = '<option value="">-- Select Group --</option>';
+        if (data.success && Array.isArray(data.groups)) {
+            data.groups.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.id;
+                option.textContent = group.name;
+                select.appendChild(option);
+            });
+        }
+    } catch (err) {
+        console.error('Error loading groups:', err);
+    }
+}
+// CSV upload handler
+document.getElementById('scheduleCsvUpload')?.addEventListener('change', async function (e) {
+    const file = e.target.files[0];
+    const statusEl = document.getElementById('scheduleCsvUploadStatus');
+    statusEl.style.display = 'none';
+    statusEl.textContent = '';
+    statusEl.className = 'scheduler-recipients-notice';
+
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('csv', file);
+
+    statusEl.style.display = 'block';
+    statusEl.className = 'scheduler-recipients-notice notice-info';
+    statusEl.textContent = 'Uploading and processing CSV...';
+
+    try {
+        const response = await fetch('/api/scheduler/upload-csv', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        });
+        const data = await response.json();
+        if (response.ok && data.success) {
+            statusEl.className = 'scheduler-recipients-notice notice-success';
+            statusEl.textContent = `CSV processed: ${data.inserted} emails added.`;
+        } else {
+            statusEl.className = 'scheduler-recipients-notice notice-error';
+            statusEl.textContent = data.error || 'CSV upload failed.';
+        }
+    } catch (err) {
+        statusEl.className = 'scheduler-recipients-notice notice-error';
+        statusEl.textContent = 'Error uploading CSV: ' + err.message;
+    }
+});
+
+function getScheduleRecipientsForSave() {
+    const source = document.getElementById('scheduleRecipientSource').value;
+
+    if (source === 'database') {
+        const selected = Array.from(document.getElementById('scheduleDbRecipients').selectedOptions)
+            .map(option => option.value.trim())
+            .filter(value => value);
+        return selected;
+    }
+    if (source === 'group') {
+        // group members are loaded into schedulerRecipientsCache
+        return schedulerRecipientsCache.slice();
+    }
+
+    const recipientsText = document.getElementById('scheduleRecipients').value;
+    return recipientsText.split('\n').map(e => e.trim()).filter(e => e);
+}
+
+function setSelectedDbRecipients(recipients) {
+    const select = document.getElementById('scheduleDbRecipients');
+    const normalized = new Set((recipients || []).map(r => r.trim()));
+    Array.from(select.options).forEach(option => {
+        option.selected = normalized.has(option.value);
+    });
+}
+
 async function saveSchedule() {
     const scheduleId = document.getElementById('scheduleName').dataset.scheduleId;
     const name = document.getElementById('scheduleName').value;
@@ -1258,15 +1505,13 @@ async function saveSchedule() {
     const scheduleTime = document.getElementById('scheduleTime').value;
     const startDate = document.getElementById('scheduleStartDate').value;
     const endDate = document.getElementById('scheduleEndDate').value;
-    const recipientsText = document.getElementById('scheduleRecipients').value;
     const notes = document.getElementById('scheduleNotes').value;
+    const recipients = getScheduleRecipientsForSave();
     
-    if (!name || !scheduleType || !startDate || !recipientsText.trim()) {
+    if (!name || !scheduleType || !startDate || recipients.length === 0) {
         alert('Please fill in all required fields');
         return;
     }
-    
-    const recipients = recipientsText.split('\n').map(e => e.trim()).filter(e => e);
     
     try {
         const method = scheduleId ? 'PUT' : 'POST';
@@ -1320,12 +1565,30 @@ async function editSchedule(scheduleId) {
             document.getElementById('scheduleEndDate').value = schedule.end_date || '';
             document.getElementById('scheduleNotes').value = schedule.notes || '';
             
-            // Parse recipients from JSON
+            let recipients = [];
             try {
-                const recipients = JSON.parse(schedule.recipient_list);
-                document.getElementById('scheduleRecipients').value = recipients.join('\n');
+                recipients = Array.isArray(schedule.recipient_list)
+                    ? schedule.recipient_list
+                    : JSON.parse(schedule.recipient_list);
             } catch (e) {
-                document.getElementById('scheduleRecipients').value = schedule.recipient_list;
+                recipients = schedule.recipient_list ? [schedule.recipient_list] : [];
+            }
+
+            document.getElementById('scheduleRecipients').value = recipients.join('\n');
+            await loadSchedulerRecipientsFromDb(recipients);
+
+            const allInDb = recipients.length > 0 && recipients.every(r => schedulerRecipientsCache.includes(r));
+
+            if (!allInDb && document.getElementById('scheduleDbRecipientFilter')) {
+                document.getElementById('scheduleDbRecipientFilter').value = 'all';
+                await loadSchedulerRecipientsFromDb(recipients);
+            }
+
+            document.getElementById('scheduleRecipientSource').value = allInDb ? 'database' : 'manual';
+            toggleScheduleRecipientMode();
+
+            if (allInDb) {
+                setSelectedDbRecipients(recipients);
             }
             
             document.getElementById('scheduleForm').style.display = 'block';
@@ -1399,8 +1662,12 @@ function resetScheduleForm() {
     document.getElementById('scheduleTime').value = '';
     document.getElementById('scheduleStartDate').value = '';
     document.getElementById('scheduleEndDate').value = '';
+    document.getElementById('scheduleRecipientSource').value = 'manual';
     document.getElementById('scheduleRecipients').value = '';
+    document.getElementById('scheduleDbRecipients').innerHTML = '';
     document.getElementById('scheduleNotes').value = '';
+    setSchedulerRecipientsNotice('');
+    toggleScheduleRecipientMode('manual');
 }
 
 // ===================== EVENT LISTENERS FOR TEMPLATES & SCHEDULER =====================
@@ -1419,6 +1686,7 @@ document.getElementById('saveTemplateBtn')?.addEventListener('click', saveTempla
 
 document.getElementById('createScheduleBtn')?.addEventListener('click', () => {
     resetScheduleForm();
+    loadSchedulerRecipientsFromDb();
     document.getElementById('scheduleForm').style.display = 'block';
     document.getElementById('scheduleForm').scrollIntoView({ behavior: 'smooth' });
 });
@@ -1428,6 +1696,8 @@ document.getElementById('cancelScheduleBtn')?.addEventListener('click', () => {
 });
 
 document.getElementById('saveScheduleBtn')?.addEventListener('click', saveSchedule);
+document.getElementById('scheduleRecipientSource')?.addEventListener('change', () => toggleScheduleRecipientMode());
+document.getElementById('scheduleDbRecipientFilter')?.addEventListener('change', () => loadSchedulerRecipientsFromDb());
 
 
 // ===================== GRAPESJS VISUAL TEMPLATE BUILDER =====================

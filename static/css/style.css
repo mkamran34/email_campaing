@@ -1038,6 +1038,47 @@ body {
     box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
 }
 
+#scheduleDbRecipients {
+    min-height: 180px;
+}
+
+.form-hint {
+    display: block;
+    margin-top: 0.5rem;
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+.scheduler-recipients-notice {
+    border-radius: 0.5rem;
+    padding: 0.65rem 0.8rem;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid transparent;
+}
+
+.scheduler-recipients-notice.notice-info {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+    color: #1e3a8a;
+}
+
+.scheduler-recipients-notice.notice-warning {
+    background: #fffbeb;
+    border-color: #fde68a;
+    color: #92400e;
+}
+
+.scheduler-recipients-notice.notice-error {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #991b1b;
+}
+
+#scheduleRecipientsCsvGroup {
+    display: none;
+}
+
 .form-actions {
     display: flex;
     gap: 1rem;

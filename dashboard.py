@@ -8,6 +8,52 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from mysql.connector import Error
 from config import DB_CONFIG
+
+app = Flask(__name__)
+# ...existing code...
+
+# --- Group endpoints (move below app initialization) ---
+@app.route('/api/scheduler/group-members', methods=['GET'])
+def api_scheduler_group_members():
+    import db_helper
+    group_id = request.args.get('group_id')
+    if not group_id:
+        return { 'success': False, 'error': 'Missing group_id' }
+    try:
+        db = db_helper.get_db()
+        cursor = db.cursor()
+        cursor.execute("""
+            SELECT emails.email
+            FROM group_members
+            JOIN emails ON group_members.email_id = emails.id
+            WHERE group_members.group_id = %s
+        """, (group_id,))
+        members = [ row[0] for row in cursor.fetchall() ]
+        return { 'success': True, 'members': members }
+    except Exception as e:
+        return { 'success': False, 'error': str(e) }
+
+@app.route('/api/scheduler/groups', methods=['GET'])
+def api_scheduler_groups():
+    import db_helper
+    try:
+        db = db_helper.get_db()
+        cursor = db.cursor()
+        cursor.execute("SELECT id, name FROM recipient_groups ORDER BY name")
+        groups = [ {'id': row[0], 'name': row[1]} for row in cursor.fetchall() ]
+        return { 'success': True, 'groups': groups }
+    except Exception as e:
+        return { 'success': False, 'error': str(e) }
+"""
+Flask web dashboard for email system management
+"""
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask_cors import CORS
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+import mysql.connector
+from mysql.connector import Error
+from config import DB_CONFIG
 import logging
 from datetime import datetime
 import os
@@ -195,6 +241,36 @@ class DashboardDB:
         except Error as e:
             logger.error(f"Error getting email count: {e}")
             return 0
+
+    def get_scheduler_recipients(self, limit=1000, validation_status=None):
+        """Get distinct recipient emails from database for scheduler"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+
+            params = []
+            query = """
+                SELECT DISTINCT recipient
+                FROM emails
+                WHERE recipient IS NOT NULL
+                AND TRIM(recipient) != ''
+            """
+
+            if validation_status:
+                query += " AND validation_status = %s"
+                params.append(validation_status)
+
+            query += " ORDER BY recipient ASC LIMIT %s"
+            params.append(limit)
+
+            cursor.execute(query, tuple(params))
+            rows = cursor.fetchall()
+            cursor.close()
+
+            recipients = [row['recipient'].strip() for row in rows if row.get('recipient')]
+            return recipients
+        except Error as e:
+            logger.error(f"Error getting scheduler recipients: {e}")
+            return []
     
     def update_email_status(self, email_id, status, error_message=None):
         """Update email status"""
@@ -1683,6 +1759,94 @@ def preview_template(template_id):
 
 
 # ===================== SCHEDULER MANAGEMENT ENDPOINTS =====================
+
+import csv
+from io import StringIO
+from flask import request
+
+@app.route('/api/scheduler/upload-csv', methods=['POST'])
+@login_required
+def upload_scheduler_csv():
+    """Upload CSV file and insert emails into database"""
+    db = None
+    try:
+        if 'csv' not in request.files:
+            return jsonify({'success': False, 'error': 'No CSV file uploaded'}), 400
+
+        file = request.files['csv']
+        if not file or not file.filename.lower().endswith('.csv'):
+            return jsonify({'success': False, 'error': 'Invalid file type'}), 400
+
+        content = file.read().decode('utf-8', errors='ignore')
+        reader = csv.DictReader(StringIO(content))
+        emails = set()
+        for row in reader:
+            if 'recipient' in row and row['recipient']:
+                emails.add(row['recipient'].strip())
+            else:
+                # fallback: if only one column, treat as email
+                for v in row.values():
+                    if v and '@' in v:
+                        emails.add(v.strip())
+
+        # If no header, try simple line split
+        if not emails and content:
+            for line in content.splitlines():
+                line = line.strip()
+                if '@' in line:
+                    emails.add(line)
+
+        if not emails:
+            return jsonify({'success': False, 'error': 'No valid email addresses found in CSV'}), 400
+
+        db = DashboardDB()
+        db.connect()
+        cursor = db.connection.cursor()
+        inserted = 0
+        for email in emails:
+            try:
+                cursor.execute("INSERT INTO emails (recipient, status, created_at, updated_at) VALUES (%s, 'pending', NOW(), NOW())", (email,))
+                inserted += 1
+            except Exception as e:
+                db.connection.rollback()
+                continue
+        db.connection.commit()
+        cursor.close()
+        db.disconnect()
+
+        return jsonify({'success': True, 'inserted': inserted, 'emails': list(emails)})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/scheduler/recipients', methods=['GET'])
+def get_scheduler_recipients():
+    """Get unique recipients from emails table for scheduler selection"""
+    db = None
+    try:
+        limit = int(request.args.get('limit', 1000))
+        validation_status = request.args.get('validation_status', '').strip() or None
+
+        if limit <= 0:
+            limit = 1000
+        if limit > 5000:
+            limit = 5000
+
+        db = DashboardDB()
+        db.connect()
+        recipients = db.get_scheduler_recipients(limit=limit, validation_status=validation_status)
+
+        return jsonify({
+            'success': True,
+            'recipients': recipients,
+            'count': len(recipients),
+            'validation_status': validation_status
+        })
+    except Exception as e:
+        logger.error(f"Error getting scheduler recipients: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if db:
+            db.disconnect()
 
 @app.route('/api/schedules', methods=['GET', 'POST'])
 def manage_schedules():

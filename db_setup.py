@@ -76,6 +76,27 @@ def create_tables():
         cursor.execute(create_users_table)
         logger.info("✓ users table created successfully")
         
+            # Create recipient_groups table if not exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS recipient_groups (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at DATETIME DEFAULT NOW()
+                )
+            ''')
+        
+            # Create group_members table if not exists
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS group_members (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    group_id INT NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    added_at DATETIME DEFAULT NOW(),
+                    FOREIGN KEY (group_id) REFERENCES recipient_groups(id) ON DELETE CASCADE
+                )
+            ''')
+        
         connection.commit()
         cursor.close()
         connection.close()
